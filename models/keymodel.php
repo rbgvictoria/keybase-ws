@@ -17,14 +17,13 @@ class KeyModel extends WebServiceModel {
             k.TaxonomicScope AS taxonomic_scope, 
             k.GeographicScope AS geographic_scope, 
             k.Notes AS notes,
-            CONCAT(u.FirstName, ' ', u.LastName) AS owner", FALSE);
+            k.CreatedByID AS created_by_id", FALSE);
         $this->db->from('keys k');
-        $this->db->join('users u', 'k.CreatedByID=u.UsersID');
         $this->db->where('k.KeysID', $keyid);
         $query = $this->db->get();
         
         if ($query->num_rows()) {
-            return $query->row_array();
+            return $query->row();
         }
     }
 
@@ -225,5 +224,132 @@ class KeyModel extends WebServiceModel {
             return FALSE;
     }
     
+    public function editKeyMetadata($data, $userid=FALSE) {
+        if (is_object($data)) {
+            $data = (array) $data;
+        }
+        $updateArray = array(
+            'Name' => $data['key_name'],
+            'Description' => $data['description'],
+            'TaxonomicScope' => $data['taxonomic_scope'],
+            'GeographicScope' => $data['geographic_scope'],
+            'Notes' => (isset($data['notes'])) ? $data['notes'] : FALSE,
+            'ProjectsID' => $data['project_id'],
+            'CreatedByID' => $data['created_by_id'],
+        );
+        
+        
+        if (!isset($data['key_id'])) {
+            $insertArray = $updateArray;
+            $this->db->select('MAX(KeysID) AS max, MAX(UID) AS maxuid', FALSE);
+            $this->db->from('keys');
+            $query = $this->db->get();
+            $row = $query->row();
+            $keyid = ($row->max) ? $row->max + 1 : 1;
+            $insertArray['KeysID'] = $keyid;
+            $insertArray['UID'] = ($row->maxuid) ? str_pad($row->maxuid + 1, 6, '0', STR_PAD_LEFT) : '000001';
+            $insertArray['Name'] = $data['key_name'];
+            $this->db->insert('keys', $insertArray);
+            $insertArray = array();
+        } 
+        else {
+            $keyid = $data['key_id'];
+        }
+        
+        if ($data['taxonomic_scope']) {
+            $this->db->select('ItemsID');
+            $this->db->from('items');
+            $this->db->where('Name', $data['taxonomic_scope']);
+            $query = $this->db->get();
+            if ($query->num_rows()) {
+                $row = $query->row();
+                $updateArray['TaxonomicScopeID'] = $row->ItemsID;
+            }
+            else {
+                $insertArray = array();
+                $this->db->select('MAX(ItemsID) AS max', FALSE);
+                $this->db->from('items');
+                $query = $this->db->get();
+                $row = $query->row();
+                $itemsid = ($row->max) ? $row->max + 1 : 1;
+                $updateArray['TaxonomicScopeID'] = $itemsid;
+                $insertArray['ItemsID'] = $itemsid;
+                $insertArray['Name'] = $data['taxonomic_scope'];
+                $this->db->insert('items', $insertArray);
+            }
+        }
+
+        if ($data['source']) {
+            $updateArray['SourcesID'] = $this->updateSource($keyid, $data['source']);
+        }
+        elseif (isset($data['source_id'])) {
+            $updateArray['SourcesID'] = $data['source_id'];
+        }
+        $timestamp = date('Y-m-d H:i:s');
+        $updateArray['TimestampModified'] = $timestamp;
+        $this->db->where('KeysID', $keyid);
+        $this->db->update('keys', $updateArray);
+        
+        if (isset($data['key_id']) && (!empty($data['change_comment']))) {
+            $changesArray = array(
+                'KeysID' => $data['key_id'],
+                'TimestampModified' => $timestamp,
+            );
+            if (isset($data['change_comment'])) 
+                $changesArray['Comment'] = $data['change_comment'];
+            if ($userid)
+                $changesArray['ModifiedByAgentID'] = $userid;
+            $this->db->insert('changes', $changesArray);
+        }
+        
+        return $keyid;
+    }
+    
+    private function updateSource($keyid, $source) {
+        if (is_object($source)) {
+            $source = (array) $source;
+        }
+        $updArray = array(
+            'Authors' => $source['author'],
+            'Year' => $source['publication_year'],
+            'Title' => $source['title'],
+            'InAuthors' => $source['in_author'],
+            'InTitle' => $source['in_title'],
+            'Edition' => $source['edition'],
+            'Journal' => $source['journal'],
+            'Volume' => $source['volume'],
+            'Part' => $source['part'],
+            'Pages' => $source['page'],
+            'Publisher' => $source['publisher'],
+            'PlaceOfPublication' => $source['place_of_publication'],
+            'Url' => $source['url'],
+        );
+        if (isset($source['is_modified']))
+            $updArray['Modified'] = $source['is_modified'];
+        else
+            $updArray['Modified'] = NULL;
+
+        $this->db->select('SourcesID');
+        $this->db->from('keys');
+        $this->db->where('KeysID', $keyid);
+        $query = $this->db->get();
+        $row = $query->row();
+        if ($row->SourcesID) {
+            $sourceid = $row->SourcesID;
+            $this->db->where('SourcesID', $row->SourcesID);
+            $this->db->update('sources', $updArray);
+        }
+        else {
+            $this->db->select('MAX(SourcesID) AS max', FALSE);
+            $this->db->from('sources');
+            $query = $this->db->get();
+            $row = $query->row();
+            $sourceid  = ($row->max) ? $row->max + 1 : 1;
+            $updArray['SourcesID'] = $sourceid;
+            $this->db->insert('sources', $updArray);
+        }
+        
+        return $sourceid;
+    }
     
 }
