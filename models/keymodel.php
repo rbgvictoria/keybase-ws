@@ -17,7 +17,10 @@ class KeyModel extends WebServiceModel {
             k.TaxonomicScope AS taxonomic_scope, 
             k.GeographicScope AS geographic_scope, 
             k.Notes AS notes,
-            k.CreatedByID AS created_by_id", FALSE);
+            k.CreatedByID AS created_by_id,
+            k.TimestampCreated as timestamp_created,
+            k.ModifiedByID as modified_by_id,
+            k.TimestampModified as timestamp_modified", FALSE);
         $this->db->from('keys k');
         $this->db->where('k.KeysID', $keyid);
         $query = $this->db->get();
@@ -236,10 +239,10 @@ class KeyModel extends WebServiceModel {
             'Notes' => (isset($data['notes'])) ? $data['notes'] : FALSE,
             'ProjectsID' => $data['project_id'],
             'CreatedByID' => $data['created_by_id'],
+            'ModifiedByID' => ($userid) ? $userid : NULL
         );
         
-        
-        if (!isset($data['key_id'])) {
+        if (!(isset($data['key_id']) && $data['key_id'])) {
             $insertArray = $updateArray;
             $this->db->select('MAX(KeysID) AS max, MAX(UID) AS maxuid', FALSE);
             $this->db->from('keys');
@@ -249,6 +252,8 @@ class KeyModel extends WebServiceModel {
             $insertArray['KeysID'] = $keyid;
             $insertArray['UID'] = ($row->maxuid) ? str_pad($row->maxuid + 1, 6, '0', STR_PAD_LEFT) : '000001';
             $insertArray['Name'] = $data['key_name'];
+            $insertArray['TimestampCreated'] = date('Y-m-d H:i:s');
+            $insertArray['CreatedByID'] = ($userid) ? $userid : NULL;
             $this->db->insert('keys', $insertArray);
             $insertArray = array();
         } 
@@ -279,7 +284,7 @@ class KeyModel extends WebServiceModel {
             }
         }
 
-        if ($data['source']) {
+        if ($data['source'] && ($data['source']->author || $data['source']->title)) {
             $updateArray['SourcesID'] = $this->updateSource($keyid, $data['source']);
         }
         elseif (isset($data['source_id'])) {
@@ -287,6 +292,7 @@ class KeyModel extends WebServiceModel {
         }
         $timestamp = date('Y-m-d H:i:s');
         $updateArray['TimestampModified'] = $timestamp;
+        
         $this->db->where('KeysID', $keyid);
         $this->db->update('keys', $updateArray);
         
@@ -301,8 +307,8 @@ class KeyModel extends WebServiceModel {
                 $changesArray['ModifiedByAgentID'] = $userid;
             $this->db->insert('changes', $changesArray);
         }
-        
         return $keyid;
+        
     }
     
     private function updateSource($keyid, $source) {
@@ -350,6 +356,40 @@ class KeyModel extends WebServiceModel {
         }
         
         return $sourceid;
+    }
+    
+    public function deleteKey($keyid, $userid) {
+        $check = $this->checkPriviliges($keyid, $userid);
+        if ($check) {
+            $this->db->trans_start();
+            
+            $this->db->where('KeysID', $keyid);
+            $this->db->delete('leads');
+            
+            $this->db->where('KeysID', $keyid);
+            $this->db->delete('keys');
+            
+            $this->db->trans_complete();
+        }
+        else {
+            return FALSE;
+        }
+    }
+    
+    private function checkPriviliges($keyid, $userid) {
+        $this->db->select('k.KeysID');
+        $this->db->from('keys k');
+        $this->db->join('projects p', 'k.ProjectsID=p.ProjectsID', 'left');
+        $this->db->join('projects_users pu', 'p.ProjectsID=pu.ProjectsID', 'left');
+        $this->db->where("(k.CreatedByID=$userid OR (pu.UsersID=$userid AND pu.Role='Manager'))", FALSE, FALSE);
+        $this->db->where('k.KeysID', $keyid);
+        $query = $this->db->get();
+        if ($query->num_rows()) {
+            return TRUE;
+        }
+        else {
+            return FALSE;
+        }
     }
     
 }

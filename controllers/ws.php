@@ -29,23 +29,31 @@ class WS extends CI_Controller {
         echo json_output($data);
     }
     
-    public function key_post($id) {
-        $keyMetadata = json_decode($this->input->post('key_metadata'));
-        $result = $this->keymodel->editKeyMetadata($keyMetadata, $this->session->userdata('id'));
+    public function key_post($id=FALSE) {
+        $keyid = $this->key_meta_post($id);
+        if (!$id) {
+            $id = $keyid;
+        }
         if (isset($_FILES['file_content']['tmp_name'])) {
             $this->load->library('KeyUploadService');
             if ($_FILES['file_content']['type'] == 'text/csv') {
-                
                 $result = $this->keyuploadservice->loadKey($id, $_FILES['file_content']['tmp_name'], 'delimitedtext');
             }
         }
+        echo json_output($keyid);
+    }
+    
+    public function key_delete($id) {
+        $result = $this->keymodel->deleteKey($id, $this->input->post('keybase_user_id'));
         echo json_output($result);
     }
     
     public function key_meta($id) {
         $data = $this->keymodel->getKey($id);
-        $data->creator = $this->keymodel->getUser($data->created_by_id);
+        $data->created_by = $this->keymodel->getUser($data->created_by_id);
         unset($data->created_by_id);
+        $data->modified_by = $this->keymodel->getUser($data->modified_by_id);
+        unset($data->modified_by_id);
         $data->source = (object) $this->keymodel->getSource($id);
         $data->source->is_modified = ($data->source->is_modified) ? true : false;
         $data->source->citation = $this->keymodel->getCitation($id);
@@ -56,6 +64,14 @@ class WS extends CI_Controller {
         $changes = $this->keymodel->getChanges($id);
         $data->changes = ($changes) ? $changes : null;
         echo json_output($data);
+    }
+    
+    public function key_meta_post($id) {
+        $this->session->unset_userdata('id');
+        $this->session->set_userdata('id', $this->input->post('keybase_user_id'));
+        $keyMetadata = json_decode($this->input->post('key_metadata'));
+        $result = $this->keymodel->editKeyMetadata($keyMetadata, $this->session->userdata('id'));
+        return $result;
     }
     
     public function project_users($project) {

@@ -42,7 +42,7 @@ class KeyUploadService {
         $this->loadimages = $loadimages;
         $this->delimiter = $delimiter;
         
-        $this->UserID = 1;
+        $this->UserID = $this->ci->session->userdata('id');
         
         $this->media = array();
         $this->icons = array();
@@ -68,7 +68,7 @@ class KeyUploadService {
         $this->Leads();
         $this->updateKeys();
         
-        return TRUE;
+        return $this->keysid;
     }
     
     private function parseLpxk() {
@@ -130,7 +130,6 @@ class KeyUploadService {
             }
             elseif ($this->delimiter == 'comma') {
                 $line = fgetcsv($handle);
-                print_r($line);
             }
             $array[] = array(
                 'fromNode' => trim(str_replace(array(':', '.'), '', $line[0])),
