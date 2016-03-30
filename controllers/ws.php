@@ -8,9 +8,15 @@ class WS extends CI_Controller {
         $this->load->library('session');
         $this->load->helper('json');
         $this->load->model('keymodel');
+        $this->load->model('projectmodel');
+        $this->load->model('filtermodel');
     }
     
-    public function key($id=FALSE) {
+    public function key($id=false) {
+        $this->key_get($id);
+    }
+    
+    public function key_get($id=FALSE) {
         if (!$id) {
             $id = $this->input->get('key_id');
         }
@@ -31,13 +37,10 @@ class WS extends CI_Controller {
     
     public function key_post($id=FALSE) {
         $keyid = $this->key_meta_post($id);
-        if (!$id) {
-            $id = $keyid;
-        }
         if (isset($_FILES['file_content']['tmp_name'])) {
             $this->load->library('KeyUploadService');
             if ($_FILES['file_content']['type'] == 'text/csv') {
-                $result = $this->keyuploadservice->loadKey($id, $_FILES['file_content']['tmp_name'], 'delimitedtext');
+                $result = $this->keyuploadservice->loadKey($keyid, $_FILES['file_content']['tmp_name'], 'delimitedtext');
             }
         }
         echo json_output($keyid);
@@ -49,6 +52,10 @@ class WS extends CI_Controller {
     }
     
     public function key_meta($id) {
+        $this->key_meta_get($id);
+    }
+    
+    public function key_meta_get($id) {
         $data = $this->keymodel->getKey($id);
         $data->created_by = $this->keymodel->getUser($data->created_by_id);
         unset($data->created_by_id);
@@ -66,7 +73,7 @@ class WS extends CI_Controller {
         echo json_output($data);
     }
     
-    public function key_meta_post($id) {
+    private function key_meta_post($id) {
         $this->session->unset_userdata('id');
         $this->session->set_userdata('id', $this->input->post('keybase_user_id'));
         $keyMetadata = json_decode($this->input->post('key_metadata'));
@@ -75,6 +82,10 @@ class WS extends CI_Controller {
     }
     
     public function project_users($project) {
+        $this->project_user_get($project);
+    }
+    
+    public function project_user_get($project) {
         $data = $this->keymodel->getProjectUsers($project);
         echo json_output($data);
     }
@@ -128,6 +139,132 @@ class WS extends CI_Controller {
         }
     }
     
+    public function projects_get() {
+        $data = $this->projectmodel->getProjects();
+        echo json_output($data);
+    }
+    
+    
+    public function total_items_get() {
+        $data = $this->projectmodel->getNumberOfItems();
+        echo json_output($data);
+    }
+    
+    public function project_get($project) {
+        $data = $this->_project_meta_get($project);
+        $data['first_key'] = $this->projectmodel->getFirstKey($project);
+        $data['keys'] = $this->_project_keys_get($project);
+        echo json_output($data);
+    }
+    
+    public function project_meta_get($project) {
+        $data = $this->_project_meta_get($project);
+        echo json_output($data);
+    }
+    
+    public function project_keys_get($project) {
+        $data = $this->_project_keys_get($project);
+        echo json_output($data);
+    } 
+    
+    private function _project_meta_get($project) {
+        return $this->projectmodel->getProjectData($project);
+    }
+    
+    private function _project_keys_get($project) {
+        return $this->projectmodel->getProjectKeys($project);
+    }
+    
+    public function project_post() {
+        $data = $this->projectmodel->editProject($this->input->post());
+        echo json_output($data);
+    }
+    
+    public function project_delete($id) {
+        $result = $this->projectmodel->deleteProject($id, $this->input->post('keybase_user_id'));
+        echo json_output($result);
+    }
+
+    public function filters_get() {
+        $params = $this->uri->uri_to_assoc(3, array('project', 'user', 'session'));
+        $data = $this->filtermodel->getFilters($params['project'], $params['user'], $params['session']);
+        echo json_output($data);
+    }
+    
+    public function project_filters_get() {
+        $params = $this->uri->uri_to_assoc(3, array('project', 'user'));
+        $data = $this->filtermodel->getProjectFilters($params['project'], $params['user']);
+        echo json_output($data);
+    }
+
+    public function manage_filters_get($project=FALSE, $user=FALSE) {
+        $data = $this->filtermodel->manageFilters($project);
+        echo json_output($data);
+    }
+    
+    public function filter_put($filterid) {
+        $taxa = preg_split("/[\r|\n]+/", trim($this->input->get_post('taxa')));
+        foreach ($taxa as $key=>$value) {
+            $taxa[$key] = trim($value);
+        }
+        $projects = $this->input->get_post('projects');
+        if (!$projects[0]) $projects = FALSE;
+        $items = $this->filtermodel->getFilterItems($taxa, $projects);
+        $filter = $this->filtermodel->updateFilter($filterid, $this->input->get_post('filtername'), $projects, $this->input->post('session'));
+        echo json_output($filter);
+    }
+    
+    public function filter_post() {
+        $taxa = preg_split("/[\r|\n]+/", trim($this->input->get_post('taxa')));
+        foreach ($taxa as $key=>$value) {
+            $taxa[$key] = trim($value);
+        }
+        $projects = $this->input->get_post('projects');
+        if (!$projects[0]) $projects = FALSE;
+        $items = $this->filtermodel->getFilterItems($taxa, $projects);
+        $filter = $this->filtermodel->updateFilter(FALSE, $this->input->get_post('filtername'), $projects, $this->input->post('session'));
+        echo json_output($filter);
+    }
+    
+    public function filter_get($filter) {
+        
+    }
+    
+    public function filter_delete($filter) {
+        $keybase_user_id = $this->input->get_post('keybase_user_id');
+        $result = $this->filtermodel->deleteFilter($filter, $keybase_user_id);
+        echo json_output($result);
+    }
+    
+    public function set_project_filter($filter) {
+        // Should be combined with $this->filter_put()
+        header('Access-Control-Allow-Origin: *');  
+        header('Access-Control-Allow-Methods: GET, PUT, POST, DELETE, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, Content-Range, Content-Disposition, Content-Description');
+        header('Content-type: application/json');
+        $this->filtermodel->setProjectFilter($filter, $this->input->post('is_project_filter'));
+        echo json_encode($filter);
+    }
+    
+    public function filter_meta_get($filterid) {
+        if (!$filterid) exit;
+        $this->load->model('filtermodel');
+        $data = $this->filtermodel->getGlobalfilterMetadata($filterid);
+        echo json_output($data);
+    }
+    
+    public function filter_projects_get($filter=FALSE) {
+        if (!$filter) exit;
+        $this->load->model('filtermodel');
+        $data = $this->filtermodel->getGlobalfilterProjects($filter);
+        echo json_output($data);
+    }
+    
+    public function filter_keys_get($filter) {
+        if (!$filter) exit;
+        $data = $this->filtermodel->globalFilter($filter);
+        echo json_output($data);
+    }
 }
 
 

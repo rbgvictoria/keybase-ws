@@ -87,7 +87,23 @@ class WebServiceModel extends CI_Model {
         }
     }
     
-    
+    public function getProjectData($projectid) {
+        $this->db->select('p.ProjectsID AS project_id, p.Name AS project_name, 
+            p.TaxonomicScope AS taxonomic_scope, p.GeographicScope AS geographic_scope, 
+            p.Description AS project_description, p.ProjectIcon AS project_icon');
+        $this->db->select('count(DISTINCT k.KeysID) AS num_keys, count(DISTINCT l.ItemsID) AS num_items');
+        $this->db->from('projects p');
+        $this->db->join('keys k', 'p.ProjectsID=k.ProjectsID', 'left');
+        $this->db->join('leads l', 'k.KeysID=l.KeysID', 'left');
+        $this->db->where('p.ProjectsID', $projectid);
+        $this->db->group_by('p.ProjectsID');
+        $query = $this->db->get();
+        if ($query->num_rows()) {
+            return $query->row_array();
+        }
+        else 
+            return FALSE;
+    }
     
 
 }
