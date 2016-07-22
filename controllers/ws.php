@@ -65,7 +65,7 @@ class WS extends CI_Controller {
         $data->source->is_modified = ($data->source->is_modified) ? true : false;
         $data->source->citation = $this->keymodel->getCitation($id);
         $data->project = (object) $this->keymodel->getProjectDetails($id);
-        $data->project->project_icon = 'http://keybase.rbg.vic.gov.au/images/projecticons/' . $data->project->project_icon;
+        $data->project->project_icon = $data->project->project_icon ? 'http://keybase.rbg.vic.gov.au/images/projecticons/' . $data->project->project_icon : NULL;
         $data->breadcrumbs = $this->keymodel->getBreadCrumbs($id);
         
         $changes = $this->keymodel->getChanges($id);
@@ -88,6 +88,16 @@ class WS extends CI_Controller {
     public function project_user_get($project) {
         $data = $this->keymodel->getProjectUsers($project);
         echo json_output($data);
+    }
+    
+    public function project_user_put() {
+        $data = $this->projectmodel->addProjectUser($this->input->post());
+        echo json_output($data);
+    }
+    
+    public function project_user_delete($id) {
+        $this->projectmodel->deleteProjectUser($id, $this->input->post());
+        echo json_output($id);
     }
     
     public function search_items($searchstring) {
@@ -214,6 +224,14 @@ class WS extends CI_Controller {
         echo json_output($filter);
     }
     
+    public function filter_items_get() {
+        $key = $this->input->get('key');
+        $filter = $this->input->get('filter');
+        if (!$key || !$filter) exit ();
+        $data = $this->filtermodel->getGlobalFilterItemsForKey($filter, $key);
+        echo json_output($data);
+    }
+    
     public function filter_post() {
         $taxa = preg_split("/[\r|\n]+/", trim($this->input->get_post('taxa')));
         foreach ($taxa as $key=>$value) {
@@ -263,6 +281,11 @@ class WS extends CI_Controller {
     public function filter_keys_get($filter) {
         if (!$filter) exit;
         $data = $this->filtermodel->globalFilter($filter);
+        echo json_output($data);
+    }
+    
+    public function users_get() {
+        $data = $this->projectmodel->getUsers();
         echo json_output($data);
     }
 }

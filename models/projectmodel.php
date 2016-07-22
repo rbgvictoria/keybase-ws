@@ -186,6 +186,48 @@ class ProjectModel extends WebServiceModel {
         return $firstKey;
     }
     
+    public function addProjectUser($data) {
+        if ($this->checkPrivileges($data['project'], $data['keybase_user_id'])) {
+            $this->db->select('count(*) as num', FALSE);
+            $this->db->from('projects_users');
+            $this->db->where('ProjectsID', $data['project']);
+            $this->db->where('UsersID', $data['user']);
+            $query = $this->db->get();
+            $row = $query->row();
+            if (!$row->num) {
+                $q = $this->db->query("SELECT MAX(ProjectsUsersID)+1 AS newid FROM projects_users");
+                $r = $q->row();
+                $newId = $r->newid;
+                $insertArray = array(
+                    'ProjectsUsersID' => $newId,
+                    'ProjectsID' => $data['project'],
+                    'UsersID' => $data['user'],
+                    'Role' => $data['role']
+                );
+                $this->db->insert('projects_users', $insertArray);
+                return $newId;
+            }
+        }
+    }
+    
+    public function deleteProjectUser($id, $data) {
+        if ($this->checkPrivileges($data['project'], $data['keybase_user_id'])) {
+            $this->db->where('ProjectsUsersID', $id);
+            $this->db->delete('projects_users');
+        }
+    }
+    
+    protected function checkPrivileges($project, $user) {
+        $this->db->select('count(*) as num', FALSE);
+        $this->db->from('projects_users');
+        $this->db->where('ProjectsID', $project);
+        $this->db->where('UsersID', $user);
+        $this->db->where('Role', 'Manager');
+        $query = $this->db->get();
+        $row = $query->row();
+        return $row->num ? TRUE : FALSE;
+    }
+    
 }
 
 /* End of file filtermodel.php */

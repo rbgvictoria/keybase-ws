@@ -376,7 +376,7 @@ class KeyModel extends WebServiceModel {
         }
     }
     
-    private function checkPriviliges($keyid, $userid) {
+    protected function checkPriviliges($keyid, $userid) {
         $this->db->select('k.KeysID');
         $this->db->from('keys k');
         $this->db->join('projects p', 'k.ProjectsID=p.ProjectsID', 'left');

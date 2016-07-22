@@ -74,6 +74,14 @@ class WebServiceModel extends CI_Model {
         }
     }
     
+    public function getUsers() {
+        $this->db->select("u.UsersID AS user_id, CONCAT(u.FirstName, ' ', u.LastName) AS full_name", FALSE);
+        $this->db->from('users u');
+        $this->db->order_by('full_name');
+        $query = $this->db->get();
+        return $query->result();
+    }
+    
     public function getUser($user) {
         $this->db->select("u.UsersID AS user_id, CONCAT(u.FirstName, ' ', u.LastName) AS full_name", FALSE);
         $this->db->from('users u');
@@ -103,6 +111,10 @@ class WebServiceModel extends CI_Model {
         }
         else 
             return FALSE;
+    }
+    
+    protected function checkPrivileges() {
+        return FALSE;
     }
     
 

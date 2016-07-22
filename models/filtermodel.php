@@ -36,6 +36,7 @@ class FilterModel extends WebServiceModel {
             foreach ($query->result() as $row)
                 $ret[$row->FilterID] = ($row->Name) ? $row->Name : $row->FilterID;
         }
+        $ret['query'] = $this->db->last_query();
         return $ret;
     }
     
@@ -321,6 +322,22 @@ class FilterModel extends WebServiceModel {
         $this->db->where_in('ItemsID', $itemIDs);
         $query = $this->db->get();
         $this->filterItems = $query->result();
+    }
+    
+    public function getGlobalFilterItemsForKey($filter, $key) {
+        $this->globalFilter($filter);
+        foreach ($this->filterKeys as $filterKey) {
+            if ($filterKey->keyID == $key) {
+                $filterItemIDs = $filterKey->items;
+            }
+        }
+        if ($filterItemIDs) {
+            $this->db->select('ItemsID as item_id, Name as item_name');
+            $this->db->from('items');
+            $this->db->where_in('ItemsID', $filterItemIDs);
+            $query = $this->db->get();
+            return $query->result();
+        }
     }
 }
 
