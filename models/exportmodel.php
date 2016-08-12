@@ -62,6 +62,7 @@ class Exportmodel extends CI_Model {
         $this->db->join('media im', 'c.MediaID=im.MediaID', 'left');
         $this->db->where('l.KeysID', $keyid);
         $this->db->where('l.LeadText IS NOT NULL', FALSE, FALSE);
+        $this->db->where('l.LeadText !=', '[link through]');
         $this->db->order_by('l.NodeNumber');
         $query = $this->db->get();
         if ($query->num_rows())

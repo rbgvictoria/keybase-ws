@@ -128,19 +128,16 @@ class ProjectModel extends WebServiceModel {
     
     public function getProjectKeys($project) {
         $ret = array();
-        $query = $this->db->query("SELECT k.KeysID, k.Name, k.TaxonomicScopeID, i.Name AS TaxonomicScope, 
-                s.KeysID AS ParentKeyID, s.Name AS ParentKeyName, k.CreatedByID, 
+        $query = $this->db->query("SELECT k.KeysID, k.Name, k.TaxonomicScopeID, i.Name AS TaxonomicScope,
+                s.KeysID AS ParentKeyID, s.Name AS ParentKeyName, k.CreatedByID,
                 concat(u.FirstName, ' ', u.LastName) AS CreatedBy
             FROM `keys` k
             LEFT JOIN (
-                SELECT coalesce(slk.KeysID, sgk.KeysID, sglk.KeysID) AS KeyID, sk.KeysID, sk.Name, sk.TaxonomicScopeID
+                SELECT slk.KeysID AS KeyID, sk.KeysID, sk.Name, sk.TaxonomicScopeID
                 FROM `keys` sk
                 JOIN leads sl ON sk.KeysID=sl.KeysID
-                LEFT JOIN `keys` slk ON sl.ItemsID=slk.TaxonomicScopeID AND slk.ProjectsID=$project
-                LEFT JOIN groupitem sg ON sl.ItemsID=sg.GroupID
-                LEFT JOIN `keys` sgk ON sg.MemberID=sgk.TaxonomicScopeID AND sg.OrderNumber=0 AND sgk.ProjectsID=$project
-                LEFT JOIN `keys` sglk ON sg.MemberID=sglk.TaxonomicScopeID AND sg.OrderNumber=1 AND sglk.ProjectsID=1
-                WHERE sk.ProjectsID=$project AND coalesce(slk.KeysID, sgk.KeysID, sglk.KeysID) IS NOT NULL
+                LEFT JOIN `keys` slk ON sl.ItemsID=slk.TaxonomicScopeID AND sk.ProjectsID=slk.ProjectsID
+                WHERE sk.ProjectsID=$project AND slk.KeysID IS NOT NULL
                 GROUP BY KeyID
             ) as s ON k.KeysID=s.KeyID
             LEFT JOIN items i ON k.TaxonomicScopeID=i.ItemsID

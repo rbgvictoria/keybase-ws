@@ -232,6 +232,12 @@ class WS extends CI_Controller {
         echo json_output($data);
     }
     
+    public function filter_items_original_get($filter) {
+        if (!$filter) exit();
+        $data = $this->filtermodel->getFilterItemsOrig($filter);
+        echo json_output($data);
+    }
+    
     public function filter_post() {
         $taxa = preg_split("/[\r|\n]+/", trim($this->input->get_post('taxa')));
         foreach ($taxa as $key=>$value) {
@@ -281,6 +287,12 @@ class WS extends CI_Controller {
     public function filter_keys_get($filter) {
         if (!$filter) exit;
         $data = $this->filtermodel->globalFilter($filter);
+        echo json_output($data);
+    }
+    
+    public function filter_items_not_found($filter) {
+        if (!$filter) exit();
+        $data = $this->filtermodel->getItemsNotFound($filter);
         echo json_output($data);
     }
     

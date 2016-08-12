@@ -5,6 +5,7 @@ require_once('Encoding.php');
 class KeyUploadService {
     private $ci;
     private $db;
+    private $UserID;
     
     private $filename;
     private $loadimages;
@@ -13,8 +14,6 @@ class KeyUploadService {
     
     private $title;
     private $firstStepID;
-    private $media;
-    private $icons;
     private $items;
     private $leads;
     private $itemIDs;
@@ -23,8 +22,8 @@ class KeyUploadService {
     private $keysid;
     private $newleads;
     
+    private $rootNodeID;
     private $nextleadid;
-    private $nodenumber;
     
     private $leadids;
     private $parentids;
@@ -35,17 +34,14 @@ class KeyUploadService {
         $this->db = $this->ci->load->database('default', TRUE);
     }
     
-    public function loadKey($keyid, $filename, $format, $loadimages=FALSE, $delimiter=FALSE) {
+    public function loadKey($keyid, $filename, $format, $delimiter=FALSE) {
         set_time_limit(900);
         $this->keysid = $keyid;
         $this->filename = $filename;
-        $this->loadimages = $loadimages;
         $this->delimiter = $delimiter;
         
         $this->UserID = $this->ci->session->userdata('id');
         
-        $this->media = array();
-        $this->icons = array();
         $this->items = array();
         $this->itemIDs = array();
         $this->leads = array();
@@ -63,10 +59,10 @@ class KeyUploadService {
             $this->parseDelimitedText();
         }
         
-        $this->Media();
         $this->Items();
         $this->Leads();
-        $this->updateKeys();
+        
+        $this->updateKey();
         
         return $this->keysid;
     }
@@ -83,12 +79,8 @@ class KeyUploadService {
                 $this->items[] = array(
                     'id' => $item->getAttribute('id'),
                     'name' => $item->getAttribute('name'),
-                    'icon' => $item->getAttribute('icon'),
-                    'url' => $item->getAttribute('url')
                 );
                 $this->itemIDs[] = $item->getAttribute('id');
-                if ($item->getAttribute('icon'))
-                    $this->media[] = array('icon' => $item->getAttribute('icon'));
             }
         }
 
@@ -108,12 +100,9 @@ class KeyUploadService {
                     'stepid' => $lead->getAttribute('stepid'),
                     'leadid' => $lead->getAttribute('leadid'),
                     'goto' => $lead->getAttribute('goto'),
-                    'icon' => $lead->getAttribute('icon'),
                     'leadtext' => $text
                 );
                 $this->stepIDs[] = $lead->getAttribute('stepid');
-                if ($lead->getAttribute('icon'))
-                    $this->media[] = array('icon' => $lead->getAttribute('icon'));
             }
         }
     }
@@ -146,8 +135,6 @@ class KeyUploadService {
                 $this->items[] = array(
                     'id' => $goto,
                     'name' => $goto,
-                    'icon' => NULL,
-                    'url' => NULL
                 );
                 $this->itemIDs[] = $goto;
             }
@@ -165,7 +152,6 @@ class KeyUploadService {
                 'stepid' => $row['fromNode'],
                 'leadid' => $index + 1,
                 'goto' => $goto,
-                'icon' => NULL,
                 'leadtext' => $row['leadText'],
             );
         }
@@ -191,109 +177,21 @@ class KeyUploadService {
         return ($sum/$count > 2) ? 'tab' : 'comma';
     }
     
-    private function Key() {
-        $select = "SELECT MAX(KeysID) AS max FROM `keys`";
-        $query = $this->db->query($select);
-        $row = $query->row();
-        $newkeysid = $row->max + 1;
-        
-        $select = "SELECT KeysID
-            FROM `keys`
-            WHERE Name=?";
-        
-        $insert = "INSERT INTO `keys` (KeysID, Name, NameUrl, Url, TaxonomicScope, GeographicScope)
-            VALUES (?, ?, ?, ?, ?, ?)";
-        
-        $geographicscope = (isset($this->keymetadata['GeographicScope'])) ?
-            $this->keymetadata['GeographicScope'] : NULL;
-        $taxonomicscope = (isset($this->keymetadata['TaxonomicScope'])) ?
-            $this->keymetadata['TaxonomicScope'] : NULL;
-
-        
-        $query = $this->db->query($select, array($this->title));
-        if ($query->num_rows()) {
-            $row = $query->row();
-            $this->keysid = $row->KeysID;
-            if ($geographicscope || $taxonomicscope) {
-                $this->db->query("UPDATE `keys`
-                    SET TaxonomicScope='$taxonomicscope', GeographicScope='$geographicscope'
-                    WHERE KeysID=$row->KeysID");
-            }
-       }
-        else {
-            $nameurl = str_replace(' ', '_', strtolower($this->title));
-            $url = (substr($this->filename, 0, 7) == 'http://') ? $this->filename : NULL;
-            $this->db->query($insert, array($newkeysid, $this->title, $nameurl, $url,
-                $taxonomicscope, $geographicscope));
-            $this->keysid = $newkeysid;
-        }
-    }
-    
-    private function Media() {
-        $max = "SELECT max(MediaID) as max
-            FROM media";
-        $query = $this->db->query($max);
-        $row = $query->row();
-        $nextmediaid = $row->max;
-        
-        $select = "SELECT MediaID 
-            FROM media 
-            WHERE KeysID=? AND OriginalFilename=?";
-        
-        $insert = "INSERT INTO media (MediaID, KeysID, OriginalFilename, Filename)
-            VALUES (?, ?, ?, ?)";
-        
-        foreach ($this->media as $key=>$img) {
-            $this->icons[] = $img['icon'];
-            $query = $this->db->query($select, array($this->keysid, $img['icon']));
-            if ($query->num_rows()) {
-                $row = $query->row();
-                $this->media[$key]['id'] = $row->MediaID;
-            }
-            else {
-                $nextmediaid++;
-                $insertArray = array();
-                $insertArray[] = $nextmediaid;
-                $insertArray[] = $this->keysid;
-                $insertArray[] = $img['icon'];
-                if ($this->loadimages)
-                    $insertArray[] = $this->loadImage($img['icon']);
-                else
-                    $insertArray[] = NULL;
-                
-                $this->db->query($insert, $insertArray);
-                
-                $this->media[$key]['id'] = $nextmediaid;
-            }
-        }
-    }
-    
     private function Items() {
+        $this->LinkedItems();
+        
         $select = "SELECT max(ItemsID) as max
             FROM items";
         $query = $this->db->query($select);
         $row = $query->row();
         $newitemsid = $row->max + 1;
         
-        $select = "SELECT max(GroupItemID) as max
-            FROM groupitem";
-        $query = $this->db->query($select);
-        $row = $query->row();
-        $newgroupitemid = $row->max + 1;
-        
         $select = "SELECT ItemsID
             FROM items
             WHERE Name=?";
 
-        $insert = "INSERT INTO items (ItemsID, Name, LSID)
-            VALUES (?, ?, ?)";
-        
-        $apcLSID = "SELECT TaxonLSID
-            FROM apc_taxa
-            WHERE ScientificName=?";
-        
-        $gi_insert = "INSERT INTO groupitem (GroupItemID, OrderNumber, GroupID, MemberID)
-            VALUES (?, ?, ?, ?)";
+        $insert = "INSERT INTO items (ItemsID, Name)
+            VALUES (?, ?)";
         
         foreach ($this->items as $key=>$item) {
             $query = $this->db->query($select, array($item['name']));
@@ -302,52 +200,34 @@ class KeyUploadService {
                 $this->items[$key]['ItemsID'] = $row->ItemsID;
             }
             else {
-                $query = $this->db->query($apcLSID, array($item['name']));
-                if ($query->num_rows()) {
-                    $row = $query->row();
-                    $lsid = $row->TaxonLSID;
-                }
-                else
-                    $lsid = NULL;
-                
-                $this->db->query($insert, array($newitemsid, $item['name'], $lsid));
+                $this->db->query($insert, array($newitemsid, $item['name']));
                 $this->items[$key]['ItemsID'] = $newitemsid;
-                
-                if (strpos($item['name'], '{')) {
-                    $groupid = $newitemsid;
-                    $members = array();
-                    $members[] = trim(substr($item['name'], 0, strpos($item['name'], '{')));
-                    $members[] = trim(substr($item['name'], strpos($item['name'], '{')+1, strpos($item['name'], '}') - strpos($item['name'], '{') -1));
-                    
-                    foreach ($members as $index => $value) {
-                        $query = $this->db->query($select, array($value));
-                        if ($query->num_rows()) {
-                            $row = $query->row();
-                            $memberid = $row->ItemsID;
-                        }
-                        else {
-                            $query = $this->db->query($apcLSID, array($item['name']));
-                            if ($query->num_rows()) {
-                                $row = $query->row();
-                                $lsid = $row->TaxonLSID;
-                            }
-                            else
-                                $lsid = NULL;
-                            $newitemsid++;
-                            $memberid = $newitemsid;
-                            $this->db->query($insert, array($newitemsid, $value, $lsid));
-                        }
-                        $this->db->query($gi_insert, array($newgroupitemid, $index, $groupid, $memberid));
-                        $newgroupitemid++;
-                    }
-                }
                 $newitemsid++;
             }
-            
+        }
+    }
+    
+    private function LinkedItems() {
+        foreach ($this->items as $index => $item) {
+            if (strpos($item['name'], '{')) {
+                $itemName = trim(substr($item['name'], 0, strpos($item['name'], '{')));
+                $linkedItemName = trim(substr($item['name'], strpos($item['name'], '{') + 1, strpos($item['name'], '}') - strpos($item['name'], '}') -1));
+                $this->items[$index]['id'] = $itemName;
+                $this->items[$index]['name'] = $itemName;
+                $this->itemIDs[$index] = $itemName;
+                
+                $this->itemIDs[] = $linkedItemName;
+                $this->items[] = array(
+                    'id' => $linkedItemName,
+                    'name' => $linkedItemName,
+                );
+            }
         }
     }
     
     private function Leads() {
+        $this->firstStep();
+        
         $select = "SELECT KeysID
             FROM leads
             WHERE KeysID=?";
@@ -360,35 +240,8 @@ class KeyUploadService {
             $this->db->query($delete, array($this->keysid));
         }
         
-        $max = "SELECT MAX(LeadsID) as max
-            FROM leads";
-        $query = $this->db->query($max);
-        $row = $query->row();
-        $this->nextleadid = $row->max + 1;
-        $this->nodenumber = 1;
-
-        $this->newleads = array();
-        $newlead = (array) new Lead();
-        $newlead['KeysID'] = $this->keysid;
-        $newlead['LeadsID'] = $this->nextleadid;
-        $newlead['NodeName'] = $this->title;
-        $newlead['NodeNumber'] = $this->nodenumber;
-        $newlead['TimestampModified'] = date('Y-m-d H:i:s');
-        $newlead['ModifiedByAgentID'] = $this->UserID;
-        
-        $this->newleads[] = $newlead;
-        $this->leadids[] = $this->nextleadid;
-        $this->parentids[] = NULL;
-        
-        $this->nextleadid++;
-        $this->nodenumber++;
-        
-        $this->nextLead($newlead['LeadsID'], $this->firstStepID);
-        
-        $this->getHighestDescendantNodeNumbers();
-        
         // insert into database
-        $fields = array_keys($this->newleads[0]);
+        $fields = array_keys((array) new Lead);
         $values = array();
         foreach ($fields as $field)
             $values[] = '?';
@@ -400,135 +253,112 @@ class KeyUploadService {
             VALUES ($values)";
         
         foreach ($this->newleads as $row) {
-            $this->db->query($insert, array_values($row));
+            $this->db->query($insert, array_values((array) $row));
         } 
-        
     }
     
-    function nextLead($parentid, $goto) {
+    private function firstStep() {
+        $max = "SELECT MAX(LeadsID) as max
+            FROM leads";
+        $query = $this->db->query($max);
+        $row = $query->row();
+        $this->rootNodeID = $row->max + 1;
+        $this->nextleadid = $this->rootNodeID;
+        
+        $this->newleads = array();
+        $newlead = new Lead();
+        $newlead->KeysID = $this->keysid;
+        $newlead->LeadsID = $this->nextleadid;
+        $newlead->NodeName = $this->title;
+        $newlead->TimestampModified = date('Y-m-d H:i:s');
+        $newlead->ModifiedByAgentID = $this->UserID;
+        
+        $this->newleads[] = $newlead;
+        $this->leadids[] = $this->nextleadid;
+        $this->parentids[] = NULL;
+        
+        $this->nextleadid++;
+        
+        $this->nextStep($newlead->LeadsID, $this->firstStepID);
+    }
+    
+    function nextStep($parentid, $goto) {
         $nextLeadIDs = array_keys($this->stepIDs, $goto);
         foreach ($nextLeadIDs as $key) {
             $thisLead = $this->leads[$key];
-            $newlead = (array) new Lead();
-            $newlead['KeysID'] = $this->keysid;
-            $newlead['LeadsID'] = $this->nextleadid;
-            $newlead['LeadText'] = $thisLead['leadtext'];
-            $newlead['NodeNumber'] = $this->nodenumber;
-            $newlead['ParentID'] = $parentid;
-            $newlead['TimestampModified'] = date('Y-m-d H:i:s');
-            $newlead['ModifiedByAgentID'] = $this->UserID;
-            
-            if ($thisLead['icon']) {
-                $key = array_search($thisLead['icon'], $this->icons);
-                $newlead['MediaID'] = $this->media[$key]['id'];
-            }
+            $newlead = new Lead();
+            $newlead->KeysID = $this->keysid;
+            $newlead->LeadsID = $this->nextleadid;
+            $newlead->LeadText = $thisLead['leadtext'];
+            $newlead->ParentID = $parentid;
+            $newlead->TimestampModified = date('Y-m-d H:i:s');
+            $newlead->ModifiedByAgentID = $this->UserID;
             
             $this->newleads[] = $newlead;
             $this->leadids[] = $this->nextleadid;
             $this->parentids[] = $parentid;
             
             $this->nextleadid++;
-            $this->nodenumber++;
             
             if (in_array($thisLead['goto'], $this->stepIDs)) {
-                $this->nextLead($newlead['LeadsID'], $thisLead['goto']);
+                $this->nextStep($newlead->LeadsID, $thisLead['goto']);
             }
-            elseif (in_array($thisLead['goto'], $this->itemIDs)) {
-                $endnode = (array) new Lead();
-                $endnode['KeysID'] = $this->keysid;
-                $endnode['LeadsID'] = $this->nextleadid;
-                $endnode['TimestampModified'] = date('Y-m-d H:i:s');
-                $endnode['ModifiedByAgentID'] = $this->UserID;
-                $key = array_search($thisLead['goto'], $this->itemIDs);
-                if ($key !== FALSE) {
-                    $endnode['NodeName'] = $this->items[$key]['name'];
-                    $endnode['ItemsID'] = $this->items[$key]['ItemsID'];
-                    if ($this->items[$key]['icon']) {
-                        $ikey = array_search($this->items[$key]['icon'], $this->icons);
-                        $endnode['MediaID'] = $this->media[$ikey]['id'];
-                    }
-                    if ($this->items[$key]['url']) {
-                        if (substr($this->filename, 0, 7) == 'http://')
-                            $endnode['ItemUrl'] = pathinfo ($this->filename, PATHINFO_DIRNAME) . 
-                                    substr ($this->items[$key]['url'], strpos ($this->items[$key]['url'], '/'));
-                        else
-                            $endnode['ItemUrl'] = $this->items[$key]['url'];
-                    }
-                }
-                $endnode['NodeNumber'] = $this->nodenumber;
-                $endnode['ParentID'] = $newlead['LeadsID'];
-                $this->newleads[] = $endnode;
-                $this->leadids[] = $this->nextleadid;
-                $this->parentids[] = $newlead['LeadsID'];
-                
-                $this->nextleadid++;
-                $this->nodenumber++;
+            else {
+                $this->endNode($newlead->LeadsID, $thisLead);
             }
         }
     }
     
-    private function getHighestDescendantNodeNumbers() {
-        foreach ($this->newleads as $key=>$lead) {
-            $this->getHighestDescendantNodeNumber($key, $lead['LeadsID']);
+    private function endNode($parentID, $lead) {
+        $endnode = new Lead();
+        $endnode->KeysID = $this->keysid;
+        $endnode->LeadsID = $this->nextleadid;
+        $endnode->TimestampModified = date('Y-m-d H:i:s');
+        $endnode->ModifiedByAgentID = $this->UserID;
+        if (strpos($lead['goto'], '{')) {
+            $lead['linkto'] = substr($lead['goto'], strpos($lead['goto'], '{') + 1, strpos($lead['goto'], '}') - strpos($lead['goto'], '{') -1);
+            $lead['goto'] = trim(substr($lead['goto'], 0, strpos($lead['goto'], '{') - 1));
+        }
+        $key = array_search($lead['goto'], $this->itemIDs);
+        if ($key !== FALSE) {
+            $endnode->NodeName = $this->items[$key]['name'];
+            $endnode->ItemsID = $this->items[$key]['ItemsID'];
+        }
+        $endnode->ParentID = $parentID;
+        $this->newleads[] = $endnode;
+        $this->leadids[] = $this->nextleadid;
+        $this->parentids[] = $parentID;
+        $this->nextleadid++;
+        if (isset($lead['linkto'])) {
+            $this->linkTo($endnode, $lead['linkto']);
         }
     }
-    
-    private function getHighestDescendantNodeNumber($key, $leadid) {
-        $parentids = array_keys($this->parentids, $leadid);
-        if ($parentids) {
-            foreach ($parentids as $parentid) {
-                $lead = $this->newleads[$parentid];
-                $this->getHighestDescendantNodeNumber($key, $lead['LeadsID']);
-            }
-        }
-        else {
-            $skey = array_search($leadid, $this->leadids);
-            if ($skey !== FALSE) {
-                $lead = $this->newleads[$skey];
-                $this->newleads[$key]['HighestDescendantNodeNumber'] = $lead['NodeNumber']; 
-            }
-        }
-    }
-    
-    private function loadImage($icon) {
-        $url = pathInfo($this->filename, PATHINFO_DIRNAME) . substr($icon, strpos($icon, '/'));
-        $extension = pathinfo($icon, PATHINFO_EXTENSION);
-        
-        $newname = 'keybase.' . uniqid() . '.' . $extension;
-        
-        switch ($extension) {
-            case 'jpg':
-            case 'JPG':
-                $img = imagecreatefromjpeg($url);
-                imagejpeg($img, 'images/' . $newname);
-                break;
 
-            case 'gif':
-            case 'GIF':
-                $img = imagecreatefromgif($url);
-                imagegif($img, 'images/' . $newname);
-                break;
+    private function linkTo($endnode, $linkto) {
+        $linkToNode = new Lead();
+        $linkToNode->KeysID = $this->keysid;
+        $linkToNode->LeadsID = $this->nextleadid;
+        $linkToNode->TimestampModified = date('Y-m-d H:i:s');
+        $linkToNode->ModifiedByAgentID = $this->UserID;
+        $linkToNode->LeadText = '[link through]';
 
-            case 'png':
-            case 'PNG':
-                $img = imagecreatefrompng($url);
-                imagepng($img, 'images/' . $newname);
-                break;
-
-            default:
-                break;
+        $key = array_search($linkto, $this->itemIDs);
+        if ($key !== FALSE) {
+            $linkToNode->NodeName = $this->items[$key]['name'];
+            $linkToNode->ItemsID = $this->items[$key]['ItemsID'];
         }
-        
-        return $newname;
+        $linkToNode->ParentID = $endnode->LeadsID;
+        $this->newleads[] = $linkToNode;
+        $this->leadids[] = $this->nextleadid;
+        $this->parentids[] = $endnode->LeadsID;
+        $this->nextleadid++;
     }
     
-    private function updateKeys () {
-        $data = array(
-            'TimestampModified' => date('Y-m-d H:i:s'),
-            'ModifiedByID' => $this->ci->session->userdata('id'),
-        );
-        $this->db->where('KeysID', $this->keysid);
-        $this->db->update('keys', $data);
+    private function updateKey() {
+        $update = "UPDATE `keys`
+            SET FirstStepID=$this->rootNodeID, TimestampModified=NOW(), ModifiedByID=$this->UserID, Version=Version+1
+            WHERE KeysID=$this->keysid";
+        $query = $this->db->query($update);
     }
     
 }
@@ -539,8 +369,6 @@ class Lead {
     var $NodeName = NULL;
     var $LeadText = NULL;
     var $ParentID = NULL;
-    var $NodeNumber = NULL;
-    var $HighestDescendantNodeNumber = NULL;
     var $ItemsID = NULL;
     var $MediaID = NULL;
     var $ItemUrl = NULL;

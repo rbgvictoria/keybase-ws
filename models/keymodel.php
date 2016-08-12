@@ -46,53 +46,18 @@ class KeyModel extends WebServiceModel {
     }
 
     public function getKeyItems($keysid) {
-        $bie = 'http://bie.ala.org.au/species/';
-        
-        $query = $this->db->query("SELECT count(*) AS num FROM projectitems WHERE ProjectsID=(SELECT ProjectsID FROM `keys` WHERE KeysID=$keysid)", FALSE);
-        $row = $query->row();
-        $hasProjectItems = ($row->num) ? TRUE : FALSE;
-        
-        if ($hasProjectItems) {
-            $this->db->select('i.ItemsID AS item_id, 
-                coalesce(m.Name, i.Name) AS item_name,
-                coalesce(mpi.Url, pi.Url) AS url,
-                coalesce(mkto.KeysID, kto.KeysID) AS to_key,
-                mlt.ItemsID AS link_to_item_id,
-                mlt.Name AS link_to_item_name,
-                lpi.Url AS link_to_url,
-                mltkto.KeysID AS link_to_key', FALSE);
-        }
-        else {
-            $this->db->select("i.ItemsID AS item_id, 
-                coalesce(m.Name, i.Name) AS item_name,
-                concat('$bie', coalesce(m.LSID, i.LSID)) AS url,
-                coalesce(mkto.KeysID, kto.KeysID) AS to_key,
-                mlt.ItemsID AS link_to_item_id,
-                mlt.Name AS link_to_item_name,
-                concat('$bie', mlt.LSID) AS link_to_url,
-                mltkto.KeysID AS link_to_key", FALSE);
-        }
+        $this->db->select('i.ItemsID AS item_id, 
+            i.name AS item_name,
+            pi.Url AS url,
+            kto.KeysID AS to_key', FALSE);
         $this->db->from('leads l');
         $this->db->join('keys k', 'l.keysID=k.KeysID');
         $this->db->join('items i', 'l.ItemsID=i.ItemsID');
         $this->db->join('keys kto', 'l.ItemsID=kto.TaxonomicScopeID AND k.ProjectsID=kto.ProjectsID', 'left');
-        $this->db->join('groupitem gi', 'l.ItemsID=gi.GroupID AND gi.OrderNumber=0', 'left', FALSE);
-        $this->db->join('items m', 'gi.MemberID=m.ItemsID', 'left');
-        $this->db->join('keys mkto', 'm.ItemsID=mkto.TaxonomicScopeID AND k.ProjectsID=mkto.ProjectsID', 'left');
-        $this->db->join('groupitem gilt', 'l.ItemsID=gilt.GroupID AND gilt.OrderNumber=1', 'left', FALSE);
-        $this->db->join('items mlt', 'gilt.MemberID=mlt.ItemsID', 'left');
-        $this->db->join('keys mltkto', 'mlt.ItemsID=mltkto.TaxonomicScopeID AND k.ProjectsID=mltkto.ProjectsID', 'left');
-        
-        if ($hasProjectItems) {
-            $this->db->join('projectitems pi', "i.ItemsID=pi.ItemsID AND pi.ProjectsID=k.ProjectsID", 'left', FALSE);
-            $this->db->join('projectitems mpi', "m.ItemsID=mpi.ItemsID AND mpi.ProjectsID=k.ProjectsID", 'left', FALSE);
-            $this->db->join('projectitems lpi', "mlt.ItemsID=lpi.ItemsID AND lpi.ProjectsID=k.ProjectsID", 'left', FALSE);
-        }
-        
+        $this->db->join('projectitems pi', "i.ItemsID=pi.ItemsID AND pi.ProjectsID=k.ProjectsID", 'left', FALSE);
         $this->db->where('l.KeysID', $keysid);
         $this->db->group_by('item_id');
-        $this->db->order_by('item_name, link_to_item_name');
-        
+        $this->db->order_by('item_name');
         $query = $this->db->get();
         if ($query->num_rows())
             return $query->result_array();
@@ -101,22 +66,21 @@ class KeyModel extends WebServiceModel {
     }
     
     public function getRootNode($keysID) {
-        $this->db->select('LeadsID AS root_node_id /*, NodeNumber AS `left`, HighestDescendantNodeNumber AS `right`*/', FALSE);
-        $this->db->from('leads');
+        $this->db->select('FirstStepID as root_node_id');
+        $this->db->from('keys');
         $this->db->where('KeysID', $keysID);
-        $this->db->where('NodeNumber', 1);
         $query = $this->db->get();
         return $query->row();
     }
 
     public function getLeads($keysid) {
-        $this->db->select("p.ParentID AS parent_id, p.LeadsID AS lead_id, /*p.NodeNumber AS `left`, p.HighestDescendantNodeNumber AS `right`,*/ 
-            p.LeadText AS lead_text, l.ItemsID AS item", false);
+        $this->db->select("coalesce(gp.ParentID, p.ParentID) AS parent_id, p.LeadsID AS lead_id, p.LeadText AS lead_text, coalesce(p.ItemsID, l.ItemsID) AS item", false);
         $this->db->from('leads p');
         $this->db->join('leads l', 'p.LeadsID=l.ParentID AND l.NodeName IS NOT NULL', 'left', false);
+        $this->db->join('leads gp', 'p.ParentID=gp.LeadsID AND p.LeadText IS NOT NULL AND p.ItemsID IS NOT NULL', 'left', FALSE);
         $this->db->where('p.KeysID', $keysid);
         $this->db->where('p.LeadText IS NOT NULL', false, false);
-        $this->db->order_by('p.ParentID, p.NodeNumber');
+        $this->db->order_by('p.ParentID');
         $query = $this->db->get();
         return $query->result();
     }
@@ -193,18 +157,12 @@ class KeyModel extends WebServiceModel {
     }
     
     function getCrumb($key) {
-        $this->db->select('coalesce(pk.KeysID, gpk.KeysID, gltpk.KeysID) AS key_id, coalesce(pk.Name, gpk.Name, gltpk.Name) AS key_name', FALSE);
+        $this->db->select('pk.KeysID AS key_id, pk.Name AS key_name', FALSE);
         $this->db->from('keys k');
         $this->db->join('leads l', 'k.TaxonomicScopeID=l.ItemsID', 'left');
         $this->db->join('keys pk', 'l.KeysID=pk.KeysID AND k.ProjectsID=pk.ProjectsID', 'left');
-        $this->db->join('groupitem g', 'k.TaxonomicScopeID=g.MemberID AND g.OrderNumber=0', 'left', FALSE);
-        $this->db->join('leads gl', 'g.GroupID=gl.ItemsID', 'left');
-        $this->db->join('keys gpk', 'gl.KeysID=gpk.KeysID AND k.ProjectsID=gpk.ProjectsID', 'left');
-        $this->db->join('groupitem glt', 'k.TaxonomicScopeID=glt.MemberID AND glt.OrderNumber=1', 'left', FALSE);
-        $this->db->join('leads gltl', 'glt.GroupID=gltl.ItemsID', 'left');
-        $this->db->join('keys gltpk', 'gltl.KeysID=gltpk.KeysID AND k.ProjectsID=gltpk.ProjectsID', 'left');
         $this->db->where('k.KeysID', $key);
-        $this->db->where('coalesce(pk.KeysID, gpk.KeysID, gltpk.KeysID) IS NOT NULL', FALSE, FALSE);
+        $this->db->where('pk.KeysID IS NOT NULL', FALSE, FALSE);
         $query = $this->db->get();
         if ($query->num_rows()) {
             $row = $query->row_array();

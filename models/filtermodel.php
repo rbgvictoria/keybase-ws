@@ -36,7 +36,6 @@ class FilterModel extends WebServiceModel {
             foreach ($query->result() as $row)
                 $ret[$row->FilterID] = ($row->Name) ? $row->Name : $row->FilterID;
         }
-        $ret['query'] = $this->db->last_query();
         return $ret;
     }
     
@@ -268,17 +267,13 @@ class FilterModel extends WebServiceModel {
         $this->filterProjects = $query->result();
     }
     
-    
-    
     private function getGlobalFilterKeys($items, $projects=FALSE) {
         $newItems = array();
         $this->db->select('k.ProjectsID, k.KeysID, k.TaxonomicScopeID, k.Name AS KeyName, 
             group_concat(DISTINCT cast(l.ItemsID as char)) AS Items', FALSE);
         $this->db->from('keys k');
         $this->db->join('leads l', 'k.KeysID=l.KeysID');
-        $this->db->join('groupitem g0', 'l.ItemsID=g0.GroupID AND g0.OrderNumber=0', 'left', FALSE);
-        $this->db->join('groupitem g1', 'l.ItemsID=g1.GroupID AND g1.OrderNumber=1', 'left', FALSE);
-        $this->db->join('items i', 'coalesce(g1.MemberID, g0.MemberID, l.ItemsID)=i.ItemsID', 'inner', FALSE);
+        $this->db->join('items i', 'l.ItemsID=i.ItemsID');
         if ($projects) {
             $this->db->where_in('k.ProjectsID', $projects);
         }
@@ -322,6 +317,40 @@ class FilterModel extends WebServiceModel {
         $this->db->where_in('ItemsID', $itemIDs);
         $query = $this->db->get();
         $this->filterItems = $query->result();
+    }
+    
+    public function getFilterItemsOrig($filter) {
+        $this->db->select('FilterItems');
+        $this->db->from('globalfilter');
+        $this->db->where('FilterID', $filter);
+        $query = $this->db->get();
+        if ($query->num_rows()) {
+            $row = $query->row();
+            $items = unserialize($row->FilterItems);
+            $this->db->select('ItemsID AS itemID, Name AS itemName');
+            $this->db->from('items');
+            $this->db->where_in('ItemsID', $items);
+            $this->db->order_by('Name');
+            $query = $this->db->get();
+            if ($query->num_rows()) {
+                return $query->result();
+            }
+        }
+    }
+    
+    public function getItemsNotFound($filter) {
+        $this->db->select('ItemsNotFound');
+        $this->db->from('globalfilter');
+        $this->db->where('FilterID', $filter);
+        $query = $this->db->get();
+        if ($query->num_rows()) {
+            $row = $query->row();
+            if ($row->ItemsNotFound) {
+                $items = explode('|', $row->ItemsNotFound);
+                sort($items);
+                return $items;
+            }
+        }
     }
     
     public function getGlobalFilterItemsForKey($filter, $key) {
