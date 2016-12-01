@@ -26,6 +26,9 @@ class WS extends CI_Controller {
         $data = $this->keymodel->getKey($id);
         $data->project = (object) $this->keymodel->getProjectDetails($id);
         $data->project->project_icon = 'http://keybase.rbg.vic.gov.au/images/projecticons/' . $data->project->project_icon;
+        $data->breadcrumbs = $this->keymodel->getBreadCrumbs($id);
+        $data->taxonomic_scope = $this->keymodel->getItem($data->TaxonomicScopeID, $data->project->project_id);
+        //unset($data->TaxonomicScopeID);
         $data->source = (object) $this->keymodel->getSource($id);
         $data->source->is_modified = ($data->source->is_modified) ? true : false;
         $data->source->citation = $this->keymodel->getCitation($id);
@@ -101,7 +104,7 @@ class WS extends CI_Controller {
     }
     
     public function search_items($searchstring) {
-        $data = $this->keymodel->getSearchResult($searchstring);
+        $data = $this->keymodel->getSearchResult(urldecode($searchstring));
         foreach ($data as $index => $row) {
             $row->project = $this->keymodel->getProjectDetails($row->key_id);
             $data[$index] = $row;

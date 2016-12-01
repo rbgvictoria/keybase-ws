@@ -9,12 +9,13 @@ class KeyModel extends WebServiceModel {
     }
     
     public function getKey($keyid) {
-        $this->db->select("k.KeysID AS key_id, 
-            k.Name AS key_name, 
+        $this->db->select("k.KeysID AS key_id,
+            k.Name AS key_name,
             k.UID, 
-            k.Description AS description, 
-            k.Rank AS rank, 
-            k.TaxonomicScope AS taxonomic_scope, 
+            k.Description AS description,
+            k.Rank AS rank,
+            k.TaxonomicScopeID,
+            k.TaxonomicScope AS taxonomic_scope,
             k.GeographicScope AS geographic_scope, 
             k.Notes AS notes,
             k.CreatedByID AS created_by_id,
@@ -29,7 +30,7 @@ class KeyModel extends WebServiceModel {
             return $query->row();
         }
     }
-
+    
     function getSource($keyid) {
         $this->db->select("s.Authors AS author, s.Year AS publication_year, s.Title AS title, s.InAuthors AS in_author, 
             s.InTitle AS in_title, s.Edition AS edition, s.Journal AS journal, s.Series AS series, s.Volume AS volume, 
@@ -63,6 +64,26 @@ class KeyModel extends WebServiceModel {
             return $query->result_array();
         else
             return FALSE;
+    }
+    
+    public function getItem($id, $project=FALSE) {
+        $this->db->select('i.ItemsID AS item_id, 
+            i.name AS item_name');
+        $this->db->from('items i');
+        $this->db->where('i.ItemsID', $id);
+        
+        if ($project) {
+            $this->db->select('pi.Url AS url');
+            $this->db->join('projectitems pi', "i.ItemsID=pi.ItemsID AND pi.ProjectsID=$project", 'left', FALSE);
+        }
+        
+        $query = $this->db->get();
+        if ($query->num_rows()) {
+            return $query->row();
+        }
+        else {
+            return NULL;
+        }
     }
     
     public function getRootNode($keysID) {

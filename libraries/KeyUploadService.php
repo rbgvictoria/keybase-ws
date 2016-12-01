@@ -40,7 +40,8 @@ class KeyUploadService {
         $this->filename = $filename;
         $this->delimiter = $delimiter;
         
-        $this->UserID = $this->ci->session->userdata('id');
+        //$this->UserID = $this->ci->session->userdata('id');
+        $this->UserID = 1;
         
         $this->items = array();
         $this->itemIDs = array();
