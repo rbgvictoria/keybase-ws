@@ -211,6 +211,7 @@ class ProjectModel extends WebServiceModel {
         if ($this->checkPrivileges($data['project'], $data['keybase_user_id'])) {
             $this->db->where('ProjectsUsersID', $id);
             $this->db->delete('projects_users');
+            return $id;
         }
     }
     

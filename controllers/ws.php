@@ -99,8 +99,8 @@ class WS extends CI_Controller {
     }
     
     public function project_user_delete($id) {
-        $this->projectmodel->deleteProjectUser($id, $this->input->post());
-        echo json_output($id);
+        $response = $this->projectmodel->deleteProjectUser($id, $this->input->post());
+        echo json_output($response);
     }
     
     public function search_items($searchstring) {
