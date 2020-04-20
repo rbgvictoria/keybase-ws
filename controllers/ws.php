@@ -10,6 +10,7 @@ class WS extends CI_Controller {
         $this->load->model('keymodel');
         $this->load->model('projectmodel');
         $this->load->model('filtermodel');
+        $this->load->model('sourcemodel');
     }
     
     public function key($id=false) {
@@ -25,12 +26,13 @@ class WS extends CI_Controller {
         }
         $data = $this->keymodel->getKey($id);
         $data->project = (object) $this->keymodel->getProjectDetails($id);
-        $data->project->project_icon = 'http://keybase.rbg.vic.gov.au/images/projecticons/' . $data->project->project_icon;
+        $data->project->project_icon = 'https://keybase.rbg.vic.gov.au/images/projecticons/' . $data->project->project_icon;
         $data->breadcrumbs = $this->keymodel->getBreadCrumbs($id);
         $data->taxonomic_scope = $this->keymodel->getItem($data->TaxonomicScopeID, $data->project->project_id);
-        //unset($data->TaxonomicScopeID);
+        $data->key_name = $data->taxonomic_scope->item_name;
+        unset($data->TaxonomicScopeID);
         $data->source = (object) $this->keymodel->getSource($id);
-        $data->source->is_modified = ($data->source->is_modified) ? true : false;
+        $data->modified_from_source = ($data->modified_from_source) ? true : false;
         $data->source->citation = $this->keymodel->getCitation($id);
         $data->items = $this->keymodel->getKeyItems($id);
         $data->first_step = $this->keymodel->getRootNode($id);
@@ -39,12 +41,17 @@ class WS extends CI_Controller {
     }
     
     public function key_post($id=FALSE) {
+        $this->session->set_userdata('id', $this->input->post('keybase_user_id'));
         $keyid = $this->key_meta_post($id);
         if (isset($_FILES['file_content']['tmp_name'])) {
             $this->load->library('KeyUploadService');
             if ($_FILES['file_content']['type'] == 'text/csv') {
-                $result = $this->keyuploadservice->loadKey($keyid, $_FILES['file_content']['tmp_name'], 'delimitedtext');
+                $this->keyuploadservice->loadKey($keyid, $_FILES['file_content']['tmp_name'], 'delimitedtext');
             }
+        }
+        elseif ($this->input->post('leads')) {
+            $this->load->library('KeyUploadService');
+            $this->keyuploadservice->loadKey($keyid, $this->input->post('leads'), 'json');
         }
         echo json_output($keyid);
     }
@@ -64,11 +71,16 @@ class WS extends CI_Controller {
         unset($data->created_by_id);
         $data->modified_by = $this->keymodel->getUser($data->modified_by_id);
         unset($data->modified_by_id);
-        $data->source = (object) $this->keymodel->getSource($id);
-        $data->source->is_modified = ($data->source->is_modified) ? true : false;
-        $data->source->citation = $this->keymodel->getCitation($id);
+        if ($data->source_id) {
+            //$data->source = (object) $this->sourcemodel->getSource($data->source_id);
+            $data->modified_from_source = ($data->modified_from_source) ? true : false;
+        }
+        else {
+            unset($data->modified_from_source);
+        }
+//        $data->source->citation = $this->keymodel->getCitation($id);
         $data->project = (object) $this->keymodel->getProjectDetails($id);
-        $data->project->project_icon = $data->project->project_icon ? 'http://keybase.rbg.vic.gov.au/images/projecticons/' . $data->project->project_icon : NULL;
+        $data->project->project_icon = $data->project->project_icon ? 'https://keybase.rbg.vic.gov.au/images/projecticons/' . $data->project->project_icon : NULL;
         $data->breadcrumbs = $this->keymodel->getBreadCrumbs($id);
         
         $changes = $this->keymodel->getChanges($id);
@@ -76,12 +88,34 @@ class WS extends CI_Controller {
         echo json_output($data);
     }
     
-    private function key_meta_post($id) {
+    public function key_meta_post($id) {
         $this->session->unset_userdata('id');
         $this->session->set_userdata('id', $this->input->post('keybase_user_id'));
         $keyMetadata = json_decode($this->input->post('key_metadata'));
         $result = $this->keymodel->editKeyMetadata($keyMetadata, $this->session->userdata('id'));
         return $result;
+    }
+    
+    public function source_get($id) {
+        $data = $this->sourcemodel->getSource($id);
+        echo json_output($data);
+    }
+    
+    public function source_post() {
+        $input = $_POST;
+        if (!$input) {
+            parse_str($_SERVER['QUERY_STRING'], $input);
+        }
+        $data = $this->sourcemodel->editSource($input);
+        echo json_output($data);
+    }
+    
+    public function source_autocomplete() {
+        if (empty($_GET['term'])) exit;
+        $uri = (object) $this->uri->uri_to_assoc(3, array('project'));
+        $term = $this->input->get('term');
+        $data = $this->sourcemodel->autocomplete($term, $uri->project);
+        echo json_output($data);
     }
     
     public function project_users($project) {
@@ -103,11 +137,17 @@ class WS extends CI_Controller {
         echo json_output($response);
     }
     
-    public function search_items($searchstring) {
-        $data = $this->keymodel->getSearchResult(urldecode($searchstring));
-        foreach ($data as $index => $row) {
-            $row->project = $this->keymodel->getProjectDetails($row->key_id);
-            $data[$index] = $row;
+    public function search_items($searchstring=false) {
+        $term = ($searchstring) ?: $this->input->get('term');
+        if (!$term) {
+            exit('A search term is required');
+        }
+        $data = $this->keymodel->getSearchResult(urldecode($term));
+        if ($data) {
+            foreach ($data as $index => $row) {
+                $row->project = $this->keymodel->getProjectDetails($row->key_id);
+                $data[$index] = $row;
+            }
         }
         echo json_output($data);
     }
@@ -197,10 +237,21 @@ class WS extends CI_Controller {
         $result = $this->projectmodel->deleteProject($id, $this->input->post('keybase_user_id'));
         echo json_output($result);
     }
+    
+    public function project_item_post($project)
+    {
+        $this->session->set_userdata('id', $this->input->post('keybase_user_id'));
+        $this->load->model('projectitemmodel');
+        $data = $this->projectitemmodel->loadProjectItems($project, json_decode($this->input->post('items')));
+        echo json_output($data);
+    }
 
     public function filters_get() {
         $params = $this->uri->uri_to_assoc(3, array('project', 'user', 'session'));
         $data = $this->filtermodel->getFilters($params['project'], $params['user'], $params['session']);
+        foreach ($data as $index => $row) {
+            $data[$index]->is_project_filter = (bool) $row->is_project_filter;
+        }
         echo json_output($data);
     }
     
@@ -246,10 +297,12 @@ class WS extends CI_Controller {
         foreach ($taxa as $key=>$value) {
             $taxa[$key] = trim($value);
         }
-        $projects = $this->input->get_post('projects');
-        if (!$projects[0]) $projects = FALSE;
-        $items = $this->filtermodel->getFilterItems($taxa, $projects);
-        $filter = $this->filtermodel->updateFilter(FALSE, $this->input->get_post('filtername'), $projects, $this->input->post('session'));
+        $project = $this->input->get_post('project');
+        $items = $this->filtermodel->getFilterItems($taxa, $project ? array($project) : false);
+        $filter = $this->filtermodel->updateFilter(FALSE, 
+                $this->input->get_post('filtername'), $project, 
+                $this->input->post('session'),
+                $this->input->post('isProjectFilter'));
         echo json_output($filter);
     }
     
@@ -277,6 +330,7 @@ class WS extends CI_Controller {
         if (!$filterid) exit;
         $this->load->model('filtermodel');
         $data = $this->filtermodel->getGlobalfilterMetadata($filterid);
+        $data->isProjectFilter = (bool) $data->isProjectFilter;
         echo json_output($data);
     }
     

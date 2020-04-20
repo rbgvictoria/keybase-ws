@@ -107,7 +107,7 @@ class FilterModel extends WebServiceModel {
         return $this->items;
     }
 
-    public function updateFilter($filterid=FALSE, $filtername=FALSE, $projects=FALSE, $session=FALSE) {
+    public function updateFilter($filterid=FALSE, $filtername=FALSE, $projects=FALSE, $session=FALSE, $isProjectFilter=false) {
         if ($filterid) {
             $this->db->select('GlobalFilterID');
             $this->db->where('FilterID', $filterid);
@@ -123,7 +123,9 @@ class FilterModel extends WebServiceModel {
         $filterArray = array(
             'Name' => ($filtername) ? $filtername : NULL,
             'FilterItems' => serialize($this->items),
-            'FilterProjects' => ($projects) ? serialize($projects) : NULL
+            'FilterProjects' => ($projects) ? serialize(array($projects)) : NULL,
+            'ProjectsID' => $projects,
+            'IsProjectFilter' => $isProjectFilter,
         );
         if ($this->notfound) {
             $filterArray['ItemsNotFound'] = implode('|', $this->notfound);
@@ -145,7 +147,7 @@ class FilterModel extends WebServiceModel {
                 'UsersID' => $this->input->post('keybase_user_id') ? $this->input->post('keybase_user_id') : NULL,
                 'IPAddress' => $this->input->ip_address(),
                 'SessionID' => $session,
-                'FilterProjects' => ($projects) ? serialize($projects) : NULL
+                'FilterProjects' => serialize(array($projects))
             ));
             $this->db->insert('globalfilter', $insertArray);
         }
@@ -153,7 +155,7 @@ class FilterModel extends WebServiceModel {
         $this->db->where('FilterID', $id);
         $this->db->delete('filterproject');
         if ($projects) {
-            foreach ($projects as $project) {
+            foreach (array($projects) as $project) {
                 $this->db->insert('filterproject', array(
                     'FilterID' => $id,
                     'ProjectID' => $project

@@ -14,7 +14,7 @@
 | path to your installation.
 |
 */
-$config['base_url']	= 'http://data.rbg.vic.gov.au/dev/keybase-ws/';
+$config['base_url']	= 'https://data.rbg.vic.gov.au/dev/keybase-ws/';
 
 /*
 |--------------------------------------------------------------------------
