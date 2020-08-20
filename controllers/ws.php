@@ -106,6 +106,7 @@ class WS extends CI_Controller {
         if (!$input) {
             parse_str($_SERVER['QUERY_STRING'], $input);
         }
+        print_r($input);
         $data = $this->sourcemodel->editSource($input);
         echo json_output($data);
     }

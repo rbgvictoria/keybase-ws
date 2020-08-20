@@ -10,14 +10,17 @@ class KeyModel extends WebServiceModel {
     
     public function getKey($keyid) {
         $this->db->select("k.KeysID AS key_id,
-            k.Name AS key_name,
+            k.Title AS key_title,
+            k.Author as key_author,
+            k.ModifiedFromSource as modified_from_source,
             k.UID, 
             k.Description AS description,
-            k.Rank AS rank,
+            k.rank,
             k.TaxonomicScopeID,
             k.TaxonomicScope AS taxonomic_scope,
             k.GeographicScope AS geographic_scope, 
             k.Notes AS notes,
+            k.SourcesID AS source_id,
             k.CreatedByID AS created_by_id,
             k.TimestampCreated as timestamp_created,
             k.ModifiedByID as modified_by_id,
@@ -57,7 +60,7 @@ class KeyModel extends WebServiceModel {
         $this->db->join('keys kto', 'l.ItemsID=kto.TaxonomicScopeID AND k.ProjectsID=kto.ProjectsID', 'left');
         $this->db->join('projectitems pi', "i.ItemsID=pi.ItemsID AND pi.ProjectsID=k.ProjectsID", 'left', FALSE);
         $this->db->where('l.KeysID', $keysid);
-        $this->db->group_by('item_id');
+        //$this->db->group_by('item_id');
         $this->db->order_by('item_name');
         $query = $this->db->get();
         if ($query->num_rows())
@@ -178,7 +181,7 @@ class KeyModel extends WebServiceModel {
     }
     
     function getCrumb($key) {
-        $this->db->select('pk.KeysID AS key_id, pk.Name AS key_name', FALSE);
+        $this->db->select('pk.KeysID AS key_id, pk.Title AS key_title', FALSE);
         $this->db->from('keys k');
         $this->db->join('leads l', 'k.TaxonomicScopeID=l.ItemsID', 'left');
         $this->db->join('keys pk', 'l.KeysID=pk.KeysID AND k.ProjectsID=pk.ProjectsID', 'left');
@@ -211,7 +214,7 @@ class KeyModel extends WebServiceModel {
             $data = (array) $data;
         }
         $updateArray = array(
-            'Name' => $data['key_name'],
+            'Title' => $data['key_title'],
             'Description' => $data['description'],
             'TaxonomicScope' => $data['taxonomic_scope'],
             'GeographicScope' => $data['geographic_scope'],
@@ -230,7 +233,7 @@ class KeyModel extends WebServiceModel {
             $keyid = ($row->max) ? $row->max + 1 : 1;
             $insertArray['KeysID'] = $keyid;
             $insertArray['UID'] = ($row->maxuid) ? str_pad($row->maxuid + 1, 6, '0', STR_PAD_LEFT) : '000001';
-            $insertArray['Name'] = $data['key_name'];
+            $insertArray['Title'] = $data['key_title'];
             $insertArray['TimestampCreated'] = date('Y-m-d H:i:s');
             $insertArray['CreatedByID'] = ($userid) ? $userid : NULL;
             $this->db->insert('keys', $insertArray);
@@ -263,12 +266,13 @@ class KeyModel extends WebServiceModel {
             }
         }
 
-        if ($data['source'] && ($data['source']->author || $data['source']->title)) {
+        if (isset($data['source']) && $data['source'] && ($data['source']->author || $data['source']->title)) {
             $updateArray['SourcesID'] = $this->updateSource($keyid, $data['source']);
         }
-        elseif (isset($data['source_id'])) {
+        elseif (isset($data['source_id']) && $data['source_id']) {
             $updateArray['SourcesID'] = $data['source_id'];
         }
+        
         $timestamp = date('Y-m-d H:i:s');
         $updateArray['TimestampModified'] = $timestamp;
         
